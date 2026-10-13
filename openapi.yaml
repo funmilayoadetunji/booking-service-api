@@ -1,0 +1,203 @@
+openapi: 3.0.3
+info:
+  title: Booking Service API
+  version: 1.0.0
+  description: Secure REST API for managing bookable services and customer bookings.
+servers:
+  - url: http://localhost:3000/api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Authentication
+  - name: Services
+  - name: Bookings
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      security: []
+      summary: Register a customer account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterInput' }
+      responses:
+        '201': { description: Account created, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/login:
+    post:
+      tags: [Authentication]
+      security: []
+      summary: Obtain a JWT access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginInput' }
+      responses:
+        '200': { description: Authenticated, content: { application/json: { schema: { $ref: '#/components/schemas/AuthResponse' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/me:
+    get:
+      tags: [Authentication]
+      summary: Get the authenticated account
+      responses:
+        '200': { description: Current user }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /services:
+    get:
+      tags: [Services]
+      security: []
+      summary: List active services with pagination
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses:
+        '200': { description: Paginated services }
+    post:
+      tags: [Services]
+      summary: Create a service (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceInput' }
+      responses:
+        '201': { description: Created service }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /services/{serviceId}:
+    parameters:
+      - { $ref: '#/components/parameters/ServiceId' }
+    get:
+      tags: [Services]
+      security: []
+      summary: Get a service
+      responses:
+        '200': { description: Service }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Services]
+      summary: Update a service (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceInput' }
+      responses:
+        '200': { description: Updated service }
+    delete:
+      tags: [Services]
+      summary: Deactivate a service (admin only)
+      responses:
+        '204': { description: Service deactivated }
+  /bookings:
+    get:
+      tags: [Bookings]
+      summary: List bookings (customers see their own; admins see all)
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/Limit' }
+        - { name: status, in: query, schema: { type: string, enum: [pending, confirmed, cancelled] } }
+      responses:
+        '200': { description: Paginated bookings }
+    post:
+      tags: [Bookings]
+      summary: Create a booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingCreateInput' }
+      responses:
+        '201': { description: Booking created }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /bookings/{bookingId}:
+    parameters:
+      - { $ref: '#/components/parameters/BookingId' }
+    get:
+      tags: [Bookings]
+      summary: Get a booking by ID
+      responses:
+        '200': { description: Booking }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Bookings]
+      summary: Update a booking; customers may amend their own pending bookings or cancel their own bookings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingUpdateInput' }
+      responses:
+        '200': { description: Updated booking }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    delete:
+      tags: [Bookings]
+      summary: Permanently delete a booking (admin only)
+      responses:
+        '204': { description: Booking deleted }
+        '403': { $ref: '#/components/responses/Forbidden' }
+components:
+  parameters:
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    ServiceId: { name: serviceId, in: path, required: true, schema: { type: string, format: uuid } }
+    BookingId: { name: bookingId, in: path, required: true, schema: { type: string, format: uuid } }
+  schemas:
+    RegisterInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8, example: SecurePass123! }
+        firstName: { type: string, maxLength: 80 }
+        lastName: { type: string, maxLength: 80 }
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+    AuthResponse:
+      type: object
+      properties:
+        accessToken: { type: string }
+        user: { $ref: '#/components/schemas/User' }
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, enum: [admin, customer] }
+        firstName: { type: string }
+        lastName: { type: string }
+    ServiceInput:
+      type: object
+      required: [name, durationMinutes, priceCents]
+      properties:
+        name: { type: string, maxLength: 120 }
+        description: { type: string, nullable: true, maxLength: 1000 }
+        durationMinutes: { type: integer, minimum: 5, maximum: 1440 }
+        priceCents: { type: integer, minimum: 0 }
+        active: { type: boolean }
+    BookingCreateInput:
+      type: object
+      required: [serviceId, startsAt]
+      properties:
+        serviceId: { type: string, format: uuid }
+        startsAt: { type: string, format: date-time }
+        notes: { type: string, maxLength: 1000 }
+    BookingUpdateInput:
+      type: object
+      properties:
+        startsAt: { type: string, format: date-time }
+        notes: { type: string, nullable: true, maxLength: 1000 }
+        status: { type: string, enum: [pending, confirmed, cancelled] }
+  responses:
+    Unauthorized: { description: Missing, invalid, or expired JWT }
+    Forbidden: { description: Insufficient role or ownership }
+    NotFound: { description: Resource not found }
+    Conflict: { description: Conflicting resource or booking time }
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
